@@ -20,13 +20,35 @@ st.markdown("""
     /* Deep Dark Purple to Black Gradient Background */
     .stApp {
         background: linear-gradient(135deg, #0d0614 0%, #150a21 40%, #0a0410 100%);
-        color: #e2d9f3;
+        color: #f3e8ff;
     }
 
-    /* Sidebar Styling */
+    /* Sidebar Background & Base Styling */
     section[data-testid="stSidebar"] {
         background-color: #0d0716 !important;
         border-right: 1px solid #28153d;
+    }
+
+    /* FIX: Brighten Sidebar Text, Labels, and Radio Button Items */
+    section[data-testid="stSidebar"] *, 
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] p {
+        color: #f3e8ff !important;
+        font-weight: 500 !important;
+    }
+
+    /* Highlight Active Selected Navigation Item */
+    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+        font-size: 1.05rem !important;
+    }
+
+    /* FIX: Make "Noesis" Title Larger & Soft Light Purple */
+    section[data-testid="stSidebar"] h1 {
+        color: #d8b4fe !important;
+        font-size: 2.2rem !important;
+        font-weight: 800 !important;
+        letter-spacing: 0.5px;
     }
 
     /* Customizing Input & Uploader Containers */
