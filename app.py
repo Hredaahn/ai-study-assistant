@@ -1,17 +1,68 @@
+import os
+import time
 import streamlit as st
-from google import genai
 import pypdf
+import google.genai as genai
 import streamlit_mermaid as st_mermaid
+from fpdf import FPDF
 
-# --- PAGE SETUP ---
-st.set_page_config(page_title="AI Study Assistant", page_icon="📚", layout="wide")
-# Custom CSS to force Mermaid diagrams and text to render at full, legible scale
+
+st.set_page_config(page_title="Noesis | AI Study Partner", layout="wide", initial_sidebar_state="expanded")
+
+
 st.markdown("""
     <style>
-    /* Expand the container for Mermaid iframe and SVG elements */
+    /* Hide top Streamlit header, footer, and GitHub icons */
+    #GithubIcon {visibility: hidden;}
+    header[data-testid="stHeader"] {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* Deep Dark Purple to Black Gradient Background */
+    .stApp {
+        background: linear-gradient(135deg, #0d0614 0%, #150a21 40%, #0a0410 100%);
+        color: #e2d9f3;
+    }
+
+    /* Sidebar Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #0d0716 !important;
+        border-right: 1px solid #28153d;
+    }
+
+    /* Customizing Input & Uploader Containers */
+    div[data-testid="stFileUploader"] {
+        background-color: #160c26;
+        border: 1px dashed #5c2d91;
+        border-radius: 10px;
+        padding: 10px;
+    }
+
+    /* Buttons Styling */
+    .stButton > button {
+        background: linear-gradient(90deg, #6b21a8 0%, #4c1d95 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-weight: 600;
+        transition: all 0.3s ease;
+    }
+    .stButton > button:hover {
+        background: linear-gradient(90deg, #7e22ce 0%, #581c87 100%);
+        box-shadow: 0px 0px 12px #7e22ce;
+        color: white;
+    }
+
+    /* Expander Containers for History */
+    div[data-testid="stExpander"] {
+        background-color: #130a20;
+        border: 1px solid #2c1547;
+        border-radius: 8px;
+    }
+
+    /* Expand Mermaid SVG container */
     iframe[title="streamlit_mermaid.streamlit_mermaid"] {
         width: 100% !important;
-        min-height: 500px !important;
+        min-height: 550px !important;
     }
     svg[id^="mermaid-"] {
         max-width: 100% !important;
@@ -20,78 +71,223 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
-st.title("📚 AI Student Study Assistant")
-st.write("Upload your notes, and let AI condense them into revision guides & mind maps!")
 
-# --- YOUR API KEY ---
-api_key = "" 
 
-# --- FILE UPLOADER BOX ---
-uploaded_file = st.file_uploader("Upload your study notes (PDF or TXT)", type=["pdf", "txt"])
+if "history" not in st.session_state:
+    st.session_state.history = []
 
-if uploaded_file:
-    extracted_text = ""
+
+def create_pdf(text_content, title="Noesis Study Material"):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=12)
     
-    # Read TXT file
-    if uploaded_file.name.endswith(".txt"):
-        extracted_text = uploaded_file.read().decode("utf-8")
-        
-    # Read PDF file
-    elif uploaded_file.name.endswith(".pdf"):
-        pdf_reader = pypdf.PdfReader(uploaded_file)
-        for page in pdf_reader.pages:
-            text = page.extract_text()
-            if text:
-                extracted_text += text + "\n"
-
-    st.success(f"File uploaded! Read {len(extracted_text)} characters.")
+    # Title
+    pdf.set_font("Helvetica", style="B", size=16)
+    pdf.cell(0, 10, title, ln=True, align="C")
+    pdf.ln(5)
     
-    # Action Button
-    if st.button("✨ Generate Revision Guide & Mind Map"):
-        truncated_text = extracted_text[:8000]
+    # Body text
+    pdf.set_font("Helvetica", size=11)
+    # Sanitize utf-8 characters for standard PDF output
+    clean_text = text_content.encode("latin-1", "replace").decode("latin-1")
+    pdf.multi_cell(0, 6, clean_text)
+    
+    return bytes(pdf.output())
 
+
+api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+
+
+st.sidebar.title("🔮 Noesis")
+st.sidebar.caption("Your AI Learning Ecosystem")
+
+nav_choice = st.sidebar.radio(
+    "Navigation",
+    [
+        "📝 Revision Summary",
+        "🗺️ Mind Map & Pictures",
+        "❓ Quiz & Questions",
+        "🛠️ Question Solver",
+        "📜 History"
+    ]
+)
+
+
+st.markdown("# Hey there")
+st.markdown("### What's on your mind today?")
+st.divider()
+
+
+def extract_pdf_text(uploaded_file):
+    reader = pypdf.PdfReader(uploaded_file)
+    text = ""
+    for page in reader.pages:
+        extracted = page.extract_text()
+        if extracted:
+            text += extracted + "\n"
+    return text[:15000]
+
+
+def call_gemini(prompt):
+    client = genai.Client(api_key=api_key)
+    max_retries = 3
+    for attempt in range(max_retries):
         try:
-            with st.spinner("Analyzing notes & constructing detailed mind map..."):
-                client = genai.Client(api_key=api_key)
-                
+            response = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt
+            )
+            return response.text
+        except Exception as err:
+            if ("503" in str(err) or "UNAVAILABLE" in str(err)) and attempt < max_retries - 1:
+                time.sleep(2 * (attempt + 1))
+                continue
+            st.error(f"Error communicating with AI service: {err}")
+            return None
+
+
+if nav_choice == "📝 Revision Summary":
+    st.subheader("Generate Revision Summary & Key Points")
+    uploaded_file = st.file_uploader("Upload Notes (PDF)", type=["pdf"], key="summary_pdf")
+    
+    if uploaded_file and api_key:
+        if st.button("Generate Summary"):
+            with st.spinner("Analyzing document with Noesis..."):
+                text = extract_pdf_text(uploaded_file)
                 prompt = (
-                    "You are an expert high school study assistant.\n"
-                    "Provide two sections in your response separated by '---MINDMAP---':\n\n"
-                    "SECTION 1: A concise revision summary with bullet points, bold key terms, and 3 flashcards.\n\n"
-                    "SECTION 2: A detailed Mermaid.js flowchart (graph LR) that maps out actual, specific concepts from the text.\n"
-                    "Rule: Do NOT use brackets, parentheses, or quotes inside node labels (e.g. A[Photosynthesis] --> B[Light Reactions]).\n"
-                    "Output ONLY the mermaid code in section 2 starting directly with 'graph LR'.\n\n"
-                    f"Notes:\n{truncated_text}"
+                    "You are an expert high school tutor.\n"
+                    "Provide a structured revision summary of the following notes:\n"
+                    "- Key Concepts & Definitions\n"
+                    "- High-Yield Bullet Points\n"
+                    "- 3-5 Revision Flashcards (Q&A format)\n\n"
+                    f"Notes:\n{text}"
                 )
+                output = call_gemini(prompt)
                 
-                response = client.models.generate_content(
-                    model="gemini-3.6-flash",
-                    contents=prompt
+                if output:
+                    st.markdown(output)
+                    
+                    st.session_state.history.append({"type": "Revision Summary", "content": output})
+                    
+                    pdf_bytes = create_pdf(output, title="Noesis - Revision Summary")
+                    st.download_button(
+                        label="📥 Download Summary as PDF",
+                        data=pdf_bytes,
+                        file_name="noesis_revision_summary.pdf",
+                        mime="application/pdf"
+                    )
+
+
+elif nav_choice == "🗺️ Mind Map & Pictures":
+    st.subheader("Generate Concept Mind Map & Visual Guidance")
+    uploaded_file = st.file_uploader("Upload Notes (PDF)", type=["pdf"], key="mindmap_pdf")
+    
+    if uploaded_file and api_key:
+        if st.button("Generate Diagram"):
+            with st.spinner("Constructing visual mind map..."):
+                text = extract_pdf_text(uploaded_file)
+                prompt = (
+                    "Provide two sections separated strictly by '---MINDMAP---':\n\n"
+                    "SECTION 1: A short visual explanation of the main topic.\n\n"
+                    "SECTION 2: A valid Mermaid.js flowchart (graph LR) mapping out concepts.\n"
+                    "Rule: Do NOT use parentheses, quotes, or brackets inside node text.\n"
+                    "Output ONLY valid mermaid code starting directly with 'graph LR' in Section 2.\n\n"
+                    f"Notes:\n{text}"
                 )
+                output = call_gemini(prompt)
                 
-                raw_response = response.text
+                if output:
+                    parts = output.split("---MINDMAP---")
+                    st.markdown(parts[0])
+                    if len(parts) > 1:
+                        diagram_code = parts[1].strip().replace("```mermaid", "").replace("```", "")
+                        st.markdown("### 💡 Visual Mind Map")
+                        try:
+                            st_mermaid.st_mermaid(diagram_code, height=600)
+                        except Exception:
+                            st.code(diagram_code, language="mermaid")
+                    
+                    st.session_state.history.append({"type": "Mind Map Explanation", "content": parts[0]})
+
+
+elif nav_choice == "❓ Quiz & Questions":
+    st.subheader("Board Question Bank & Practice Quiz")
+    uploaded_file = st.file_uploader("Upload Notes (PDF)", type=["pdf"], key="quiz_pdf")
+    
+    if uploaded_file and api_key:
+        if st.button("Generate Quiz"):
+            with st.spinner("Building assessment..."):
+                text = extract_pdf_text(uploaded_file)
+                prompt = (
+                    "Act as a board examination creator. Create a practice assessment based on these notes:\n"
+                    "1. 5 Multiple Choice Questions with answers.\n"
+                    "2. 3 Short Answer Questions with model solutions.\n"
+                    "3. 2 Analytical/Long Board-style Questions with detailed marking guidelines.\n\n"
+                    f"Notes:\n{text}"
+                )
+                output = call_gemini(prompt)
                 
-                # Split summary and mindmap reliably
-                if "---MINDMAP---" in raw_response:
-                    summary_part, diagram_part = raw_response.split("---MINDMAP---", 1)
-                else:
-                    summary_part = raw_response
-                    diagram_part = ""
+                if output:
+                    st.markdown(output)
+                    
+                    st.session_state.history.append({"type": "Quiz & Question Bank", "content": output})
+                    
+                    pdf_bytes = create_pdf(output, title="Noesis - Practice Quiz & Question Bank")
+                    st.download_button(
+                        label="📥 Download Quiz as PDF",
+                        data=pdf_bytes,
+                        file_name="noesis_practice_quiz.pdf",
+                        mime="application/pdf"
+                    )
 
-                # Clean up diagram string
-                diagram_code = diagram_part.strip().strip("`").replace("mermaid", "").strip()
 
-                # Display Text Summary
-                st.markdown("### 📝 Revision Summary & Flashcards")
-                st.write(summary_part.strip())
+elif nav_choice == "🛠️ Question Solver":
+    st.subheader("Worksheet & Question Solver")
+    uploaded_file = st.file_uploader("Upload Worksheet/Assignment (PDF)", type=["pdf"], key="solver_pdf")
+    
+    if uploaded_file and api_key:
+        if st.button("Solve Questions"):
+            with st.spinner("Solving questions step-by-step..."):
+                text = extract_pdf_text(uploaded_file)
+                prompt = (
+                    "Act as an expert academic tutor.\n"
+                    "1. Extract each question from the text.\n"
+                    "2. Provide clear, step-by-step solutions with detailed reasoning.\n"
+                    "3. Highlight formulas or key rules used.\n\n"
+                    f"Text:\n{text}"
+                )
+                output = call_gemini(prompt)
                 
-                # Display Mind Map
-                if diagram_code:
-                    st.markdown("### 💡 Concept Mind Map")
-                    try:
-                        st_mermaid.st_mermaid(diagram_code, height=800)
-                    except Exception:
-                        st.code(diagram_code, language="mermaid")
+                if output:
+                    st.markdown(output)
+                    
+                    st.session_state.history.append({"type": "Worksheet Solutions", "content": output})
+                    
+                    pdf_bytes = create_pdf(output, title="Noesis - Worksheet Solutions")
+                    st.download_button(
+                        label="📥 Download Solutions as PDF",
+                        data=pdf_bytes,
+                        file_name="noesis_worksheet_solutions.pdf",
+                        mime="application/pdf"
+                    )
 
-        except Exception as e:
-            st.error(f"An error occurred: {e}")
+
+elif nav_choice == "📜 History":
+    st.subheader("Session History & Saved Downloads")
+    
+    if not st.session_state.history:
+        st.info("No saved study sessions yet! Use the sidebar navigation to generate summaries, quizzes, or solutions.")
+    else:
+        for idx, item in enumerate(reversed(st.session_state.history)):
+            with st.expander(f"{item['type']} #{len(st.session_state.history) - idx}"):
+                st.markdown(item["content"])
+                
+                pdf_bytes = create_pdf(item["content"], title=f"Noesis - {item['type']}")
+                st.download_button(
+                    label="📥 Download PDF",
+                    data=pdf_bytes,
+                    file_name=f"noesis_{item['type'].lower().replace(' ', '_')}.pdf",
+                    mime="application/pdf",
+                    key=f"hist_pdf_{idx}"
+                )
