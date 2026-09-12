@@ -12,10 +12,23 @@ st.set_page_config(page_title="Noesis | AI Study Partner", layout="wide", initia
 
 st.markdown("""
     <style>
-    /* Hide top Streamlit header, footer, and GitHub icons */
+    /* Hide top header background & footer, but KEEP the sidebar toggle button visible */
     #GithubIcon {visibility: hidden;}
-    header[data-testid="stHeader"] {visibility: hidden;}
     footer {visibility: hidden;}
+    
+    header[data-testid="stHeader"] {
+        background-color: transparent !important;
+    }
+
+    /* Style the Sidebar Open/Close Toggle Button so it's clearly visible */
+    button[data-testid="stSidebarCollapseButton"],
+    button[data-testid="baseButton-header"] {
+        color: #d8b4fe !important;
+        background-color: #160c26 !important;
+        border: 1px solid #5c2d91 !important;
+        border-radius: 8px !important;
+        visibility: visible !important;
+    }
 
     /* Deep Dark Purple to Black Gradient Background */
     .stApp {
@@ -29,7 +42,7 @@ st.markdown("""
         border-right: 1px solid #28153d;
     }
 
-    /* FIX: Brighten Sidebar Text, Labels, and Radio Button Items */
+    /* Sidebar Text, Labels, and Radio Button Items */
     section[data-testid="stSidebar"] *, 
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] span,
@@ -38,12 +51,7 @@ st.markdown("""
         font-weight: 500 !important;
     }
 
-    /* Highlight Active Selected Navigation Item */
-    section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
-        font-size: 1.05rem !important;
-    }
-
-    /* FIX: Make "Noesis" Title Larger & Soft Light Purple */
+    /* "Noesis" Title in Sidebar */
     section[data-testid="stSidebar"] h1 {
         color: #d8b4fe !important;
         font-size: 2.2rem !important;
@@ -51,7 +59,7 @@ st.markdown("""
         letter-spacing: 0.5px;
     }
 
-    /* Customizing Input & Uploader Containers */
+    /* Input & Uploader Containers */
     div[data-testid="stFileUploader"] {
         background-color: #160c26;
         border: 1px dashed #5c2d91;
